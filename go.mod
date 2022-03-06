@@ -5,6 +5,8 @@ go 1.17
 require (
 	github.com/gorilla/mux v1.8.0
 	gitlab.com/NebulousLabs/go-upnp v0.0.0-20211002182029-11da932010b6
+	periph.io/x/conn/v3 v3.6.10
+	periph.io/x/host/v3 v3.7.2
 )
 
 require (

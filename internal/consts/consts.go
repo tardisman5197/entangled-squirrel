@@ -8,6 +8,5 @@ const (
 	DiscoverInterval   = 60000 // ms
 	ButtonName         = "GPIO2"
 	LightsName         = "GPIO3"
-	SetupTimout        = 2000 // ms
 	TearDownTimeout    = 1000 // ms
 )

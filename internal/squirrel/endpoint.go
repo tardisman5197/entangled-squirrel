@@ -3,17 +3,19 @@ package squirrel
 import (
 	"encoding/json"
 	"es/internal/utils"
+	"fmt"
 	"net/http"
 )
 
 func (s *Squirrel) flashReq(w http.ResponseWriter, r *http.Request) {
-	// TODO flash here
+	fmt.Println("flash request received")
 	w.WriteHeader(http.StatusOK)
 	w.Write([]byte("OK"))
 	go s.flash()
 }
 
 func (s *Squirrel) knownSquirrelsReq(w http.ResponseWriter, r *http.Request) {
+	fmt.Println("known squirrels request received")
 	w.WriteHeader(http.StatusOK)
 	w.Header().Set("Content-Type", "application/json")
 
@@ -28,6 +30,7 @@ func (s *Squirrel) knownSquirrelsReq(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Squirrel) addSquirrelsReq(w http.ResponseWriter, r *http.Request) {
+	fmt.Println("add squirrel request received")
 	var squirrels []string
 	err := json.NewDecoder(r.Body).Decode(&squirrels)
 	if err != nil {

@@ -4,24 +4,35 @@ import (
 	"context"
 	"es/internal/consts"
 	"es/internal/squirrel"
+	"flag"
 	"fmt"
 	"os"
+	"os/signal"
+	"syscall"
 	"time"
 )
 
 func main() {
-	s := squirrel.NewSquirrel(
-		"http://entangled-squirrel-0.duckdns.org",
-		1526,
-		"http://entangled-squirrel-1.duckdns.org:1526",
+
+	noHardware := flag.Bool("no-hardware", false, "no hardware connected")
+	port := flag.Int("port", 1526, "port to listen for other squirrels on")
+
+	flag.Parse()
+
+	fmt.Printf(
+		"Hardware: %v\nPort: %v\n",
+		!*noHardware,
+		*port,
 	)
 
-	ctx, cancel := context.WithTimeout(
-		context.Background(),
-		time.Millisecond*consts.SetupTimout,
+	s := squirrel.NewSquirrel(
+		"http://entangled-squirrel-0.duckdns.org",
+		*port,
+		"http://entangled-squirrel-1.duckdns.org:1526",
+		!*noHardware,
 	)
-	err := s.Setup(ctx)
-	cancel()
+
+	err := s.Setup()
 	if err != nil {
 		fmt.Printf("could not setup squirrel, got %v\n", err)
 		os.Exit(10)
@@ -35,9 +46,14 @@ func main() {
 	ctx, cancelDiscover := context.WithCancel(context.Background())
 	discoverErrors := s.DiscoverLoop(ctx)
 
+	sigs := make(chan os.Signal, 1)
+	signal.Notify(sigs, syscall.SIGINT, syscall.SIGTERM)
+
 	errorCode := 0
 
 	select {
+	case <-sigs:
+		fmt.Println("stop signal received")
 	case err := <-serverErrors:
 		if err != nil {
 			fmt.Printf("error while running server, got %v\n", err)
@@ -58,15 +74,17 @@ func main() {
 	cancelPress()
 	cancelDiscover()
 
-	ctx, cancel = context.WithTimeout(
+	ctx, cancel := context.WithTimeout(
 		context.Background(),
 		time.Millisecond*consts.TearDownTimeout,
 	)
 	err = s.TearDown(ctx)
 	if err != nil {
-		fmt.Printf("Could not tear down squirrel, got %v\n", err)
+		fmt.Printf("could not tear down squirrel, got %v\n", err)
 	}
 	cancel()
+
+	fmt.Printf("squirrel stopped, with code %v\n", errorCode)
 
 	os.Exit(errorCode)
 }

@@ -10,8 +10,8 @@ import (
 	"sync"
 	"time"
 
+	upnp "github.com/DeNetPRO/turbo-upnp"
 	"github.com/gorilla/mux"
-	"gitlab.com/NebulousLabs/go-upnp"
 	"periph.io/x/conn/v3/gpio"
 	"periph.io/x/conn/v3/gpio/gpioreg"
 	"periph.io/x/host/v3"
@@ -23,62 +23,66 @@ type Squirrel struct {
 	entangledSquirrelURLs map[string]int
 	entangledSquirrelLock sync.RWMutex
 
-	port   uint16
+	port   int
 	url    string
 	server *http.Server
-	igd    *upnp.IGD
+	router *upnp.Device
 
-	button gpio.PinIO
+	hardware bool
+	button   gpio.PinIO
 
 	lightsLock sync.Mutex
 	lights     gpio.PinIO
 }
 
-func NewSquirrel(url string, port uint16, knownSquirrelURL string) *Squirrel {
+func NewSquirrel(url string, port int, knownSquirrelURL string, hardware bool) *Squirrel {
 	return &Squirrel{
 		url:                   url,
 		port:                  port,
 		entangledSquirrelURLs: map[string]int{knownSquirrelURL: 0},
+		hardware:              hardware,
 	}
 }
 
-func (s *Squirrel) Setup(ctx context.Context) error {
+func (s *Squirrel) Setup() error {
 	// Setup buttons and lights
-	_, err := host.Init()
-	if err != nil {
-		return fmt.Errorf("could not setup hardware, got %v", err)
-	}
+	if s.hardware {
+		_, err := host.Init()
+		if err != nil {
+			return fmt.Errorf("could not setup hardware, got %v", err)
+		}
 
-	button := gpioreg.ByName(consts.ButtonName)
-	if button == nil {
-		return fmt.Errorf("could not find button")
-	}
-	err = button.In(gpio.PullDown, gpio.BothEdges)
-	if err != nil {
-		return fmt.Errorf("could not init button, got %v", err)
-	}
-	s.button = button
+		button := gpioreg.ByName(consts.ButtonName)
+		if button == nil {
+			return fmt.Errorf("could not find button")
+		}
+		err = button.In(gpio.PullDown, gpio.BothEdges)
+		if err != nil {
+			return fmt.Errorf("could not init button, got %v", err)
+		}
+		s.button = button
 
-	lights := gpioreg.ByName(consts.LightsName)
-	if button == nil {
-		return fmt.Errorf("could not find lights")
+		lights := gpioreg.ByName(consts.LightsName)
+		if button == nil {
+			return fmt.Errorf("could not find lights")
+		}
+		err = lights.Out(gpio.Low)
+		if err != nil {
+			return fmt.Errorf("could not init lights, got %v", err)
+		}
+		s.lightsLock.Lock()
+		s.lights = lights
+		s.lightsLock.Unlock()
 	}
-	err = lights.Out(gpio.Low)
-	if err != nil {
-		return fmt.Errorf("could not init lights, got %v", err)
-	}
-	s.lightsLock.Lock()
-	s.lights = lights
-	s.lightsLock.Unlock()
 
 	// Setup networking
-	igd, err := upnp.DiscoverCtx(ctx)
+	router, err := upnp.InitDevice()
 	if err != nil {
 		return fmt.Errorf("could not discover router, got %v", err)
 	}
-	s.igd = igd
+	s.router = router
 
-	err = s.igd.Forward(s.port, "an entangled squirrel")
+	err = s.router.Forward(s.port, "an entangled squirrel")
 	if err != nil {
 		return fmt.Errorf("could not forward a port on the router, got %v", err)
 	}
@@ -100,7 +104,7 @@ func (s *Squirrel) Setup(ctx context.Context) error {
 func (s *Squirrel) TearDown(ctx context.Context) error {
 	s.server.Shutdown(ctx)
 
-	err := s.igd.Clear(s.port)
+	err := s.router.Close(s.port)
 	if err != nil {
 		return fmt.Errorf("could not remove port forwarding, got %v", err)
 	}
@@ -110,6 +114,7 @@ func (s *Squirrel) TearDown(ctx context.Context) error {
 func (s *Squirrel) StartServer() chan error {
 	errors := make(chan error, 1)
 	go func() {
+		fmt.Println("starting server")
 		errors <- s.server.ListenAndServe()
 	}()
 	return errors
@@ -117,7 +122,13 @@ func (s *Squirrel) StartServer() chan error {
 
 func (s *Squirrel) ListenForPress(ctx context.Context) chan error {
 	errors := make(chan error, 1)
+
+	if !s.hardware {
+		return errors
+	}
+
 	go func() {
+		fmt.Println("listening for press")
 		for {
 			select {
 			case <-ctx.Done():
@@ -137,6 +148,7 @@ func (s *Squirrel) ListenForPress(ctx context.Context) chan error {
 func (s *Squirrel) DiscoverLoop(ctx context.Context) chan error {
 	errors := make(chan error, 1)
 	go func() {
+		fmt.Println("starting discover loop")
 		ticker := time.NewTicker(time.Millisecond * consts.DiscoverInterval)
 		for {
 			select {
@@ -144,6 +156,7 @@ func (s *Squirrel) DiscoverLoop(ctx context.Context) chan error {
 				errors <- nil
 				return
 			case <-ticker.C:
+				fmt.Println("discovering...")
 				s.discoverSquirrels()
 			}
 		}
@@ -179,13 +192,15 @@ func (s *Squirrel) discoverSquirrels() {
 	for _, url := range urls {
 		resp, err := http.Get(fmt.Sprintf("%s/squirrels/known", url))
 		if err != nil {
-			fmt.Printf("Could not get list of known squirrels, got %v\n", err)
+			fmt.Printf("could not get list of known squirrels, got %v\n", err)
+			continue
 		}
 
 		var squirrels []string
 		err = json.NewDecoder(resp.Body).Decode(&squirrels)
 		if err != nil {
-			fmt.Printf("Could not read list of known squirrels, got %v\n", err)
+			fmt.Printf("could not read list of known squirrels, got %v\n", err)
+			continue
 		}
 
 		s.addSquirrels(squirrels)
@@ -205,6 +220,11 @@ func (s *Squirrel) addSquirrels(urls []string) {
 }
 
 func (s *Squirrel) flash() {
+	fmt.Println("FLASH!")
+	if !s.hardware {
+		return
+	}
+
 	s.lightsLock.Lock()
 	for i := 0; i < consts.NoOfFlashes; i++ {
 		s.lights.Out(gpio.High)

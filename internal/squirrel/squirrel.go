@@ -26,6 +26,7 @@ type Squirrel struct {
 	port   int
 	url    string
 	server *http.Server
+	upnp   bool
 	router *upnp.Device
 
 	hardware bool
@@ -35,12 +36,13 @@ type Squirrel struct {
 	lights     gpio.PinIO
 }
 
-func NewSquirrel(url string, port int, knownSquirrelURL string, hardware bool) *Squirrel {
+func NewSquirrel(url string, port int, knownSquirrelURL string, hardware, upnp bool) *Squirrel {
 	return &Squirrel{
 		url:                   url,
 		port:                  port,
 		entangledSquirrelURLs: map[string]int{knownSquirrelURL: 0},
 		hardware:              hardware,
+		upnp:                  upnp,
 	}
 }
 
@@ -75,21 +77,23 @@ func (s *Squirrel) Setup() error {
 		s.lightsLock.Unlock()
 	}
 
-	// Setup networking
-	router, err := upnp.InitDevice()
-	if err != nil {
-		return fmt.Errorf("could not discover router, got %v", err)
-	}
-	s.router = router
+	if s.upnp {
+		// Setup networking
+		router, err := upnp.InitDevice()
+		if err != nil {
+			return fmt.Errorf("could not discover router, got %v", err)
+		}
+		s.router = router
 
-	err = s.router.Forward(s.port, "an entangled squirrel")
-	if err != nil {
-		return fmt.Errorf("could not forward a port on the router, got %v", err)
+		err = s.router.Forward(s.port, "an entangled squirrel")
+		if err != nil {
+			return fmt.Errorf("could not forward a port on the router, got %v", err)
+		}
 	}
 
 	// Setup server
 	r := mux.NewRouter()
-	r.HandleFunc("/update", s.flashReq).Methods("GET")
+	r.HandleFunc("/flash", s.flashReq).Methods("GET")
 	r.HandleFunc("/squirrels/add", s.addSquirrelsReq).Methods("POST")
 	r.HandleFunc("/squirrels/known", s.knownSquirrelsReq).Methods("GET")
 
@@ -104,9 +108,11 @@ func (s *Squirrel) Setup() error {
 func (s *Squirrel) TearDown(ctx context.Context) error {
 	s.server.Shutdown(ctx)
 
-	err := s.router.Close(s.port)
-	if err != nil {
-		return fmt.Errorf("could not remove port forwarding, got %v", err)
+	if s.upnp {
+		err := s.router.Close(s.port)
+		if err != nil {
+			return fmt.Errorf("could not remove port forwarding, got %v", err)
+		}
 	}
 	return nil
 }
@@ -205,6 +211,7 @@ func (s *Squirrel) discoverSquirrels() {
 
 		s.addSquirrels(squirrels)
 	}
+	fmt.Println("finished discovering")
 }
 
 func (s *Squirrel) addSquirrels(urls []string) {

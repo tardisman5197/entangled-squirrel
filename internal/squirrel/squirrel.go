@@ -20,8 +20,9 @@ import (
 type Squirrel struct {
 	// entangledSquirrelURLs contains a list of squirrels
 	// which can be communicated with.
-	entangledSquirrelURLs map[string]int
-	entangledSquirrelLock sync.RWMutex
+	entangledSquirrelURLs  map[string]int
+	entangledSquirrelsPath string
+	entangledSquirrelLock  sync.RWMutex
 
 	port   int
 	url    string
@@ -36,17 +37,25 @@ type Squirrel struct {
 	lights     gpio.PinIO
 }
 
-func NewSquirrel(url string, port int, knownSquirrelURL string, hardware, upnp bool) *Squirrel {
+func NewSquirrel(url string, port int, squirrelsPath string, hardware, upnp bool) *Squirrel {
 	return &Squirrel{
-		url:                   url,
-		port:                  port,
-		entangledSquirrelURLs: map[string]int{knownSquirrelURL: 0},
-		hardware:              hardware,
-		upnp:                  upnp,
+		url:                    url,
+		port:                   port,
+		entangledSquirrelsPath: squirrelsPath,
+		entangledSquirrelURLs:  make(map[string]int, 0),
+		hardware:               hardware,
+		upnp:                   upnp,
 	}
 }
 
 func (s *Squirrel) Setup() error {
+	squirrels, err := utils.GetSquirrels(s.entangledSquirrelsPath)
+	if err != nil {
+		return fmt.Errorf("could not find squirrels, got %v", err)
+	}
+	s.entangledSquirrelURLs = squirrels
+	fmt.Printf("Known Squirrels: %v\n", s.entangledSquirrelURLs)
+
 	// Setup buttons and lights
 	if s.hardware {
 		_, err := host.Init()
@@ -181,10 +190,10 @@ func (s *Squirrel) handlePress() {
 			s.entangledSquirrelLock.Lock()
 			s.entangledSquirrelURLs[url] = s.entangledSquirrelURLs[url] + 1
 			fmt.Printf("Could not send flash, got %v\n", err)
-			if s.entangledSquirrelURLs[url] > consts.SquirrelErrorLimit {
-				delete(s.entangledSquirrelURLs, url)
-				fmt.Printf("Removed Squirrel from entangled list, too many failed connections\n")
-			}
+			// if s.entangledSquirrelURLs[url] > consts.SquirrelErrorLimit {
+			// 	delete(s.entangledSquirrelURLs, url)
+			// 	fmt.Printf("Removed Squirrel from entangled list, too many failed connections\n")
+			// }
 			s.entangledSquirrelLock.Unlock()
 		}
 	}
@@ -223,6 +232,7 @@ func (s *Squirrel) addSquirrels(urls []string) {
 			}
 		}
 	}
+	utils.WriteSquirrels(s.entangledSquirrelsPath, s.entangledSquirrelURLs)
 	s.entangledSquirrelLock.Unlock()
 }
 

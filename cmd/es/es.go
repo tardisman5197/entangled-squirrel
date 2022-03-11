@@ -17,20 +17,22 @@ func main() {
 	noHardware := flag.Bool("no-hardware", false, "no hardware connected")
 	noUPNP := flag.Bool("no-upnp", false, "do not port forward")
 	port := flag.Int("port", 1526, "port to listen for other squirrels on")
+	squirrelPath := flag.String("squirrels", "./squirrels.txt", "the path to the list of known squirrels")
 
 	flag.Parse()
 
 	fmt.Printf(
-		"hardware: %v\nport: %v\nupnp: %v\n",
+		"hardware: %v\nport: %v\nupnp: %v\nsquirrels path: %v\n",
 		!*noHardware,
 		*port,
 		!*noUPNP,
+		*squirrelPath,
 	)
 
 	s := squirrel.NewSquirrel(
 		"http://entangled-squirrel-0.duckdns.org",
 		*port,
-		"http://entangled-squirrel-1.duckdns.org:1526",
+		*squirrelPath,
 		!*noHardware,
 		!*noUPNP,
 	)

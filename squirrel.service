@@ -1,0 +1,9 @@
+[Unit]
+Description=An Entangled Squirrel
+
+[Service]
+ExecStart=/home/pi/entangled-squirrel/cmd/es/es -squirrels /home/pi/cmd/es/squirrels.txt
+RestartOn=on-failure
+
+[Install]
+WantedBy=multi-user.target

@@ -184,6 +184,7 @@ func (s *Squirrel) handlePress() {
 	urls := utils.GetKeys(s.entangledSquirrelURLs)
 	s.entangledSquirrelLock.RUnlock()
 
+	s.flash(1)
 	for _, url := range urls {
 		err := utils.SendFlash(url)
 		if err != nil {
@@ -236,16 +237,25 @@ func (s *Squirrel) addSquirrels(urls []string) {
 	s.entangledSquirrelLock.Unlock()
 }
 
-func (s *Squirrel) flash() {
+func (s *Squirrel) flash(noOfFlashes int) {
 	fmt.Println("FLASH!")
 	if !s.hardware {
 		return
 	}
 
 	s.lightsLock.Lock()
-	for i := 0; i < consts.NoOfFlashes; i++ {
-		s.lights.Out(gpio.High)
+
+	state := true
+	for i := 0; i < noOfFlashes; i++ {
+		if state {
+			s.lights.Out(gpio.High)
+		} else {
+			s.lights.Out(gpio.Low)
+		}
+		state = !state
 		time.Sleep(time.Millisecond * consts.FlashInterval)
 	}
+	s.lights.Out(gpio.Low)
+
 	s.lightsLock.Unlock()
 }

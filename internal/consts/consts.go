@@ -2,11 +2,11 @@ package consts
 
 const (
 	SquirrelErrorLimit = 20
-	ButtonTimout       = 200 // ms
-	FlashInterval      = 300 // ms
+	ButtonTimout       = 200  // ms
+	FlashInterval      = 1000 // ms
 	NoOfFlashes        = 3
 	DiscoverInterval   = 60000 // ms
-	ButtonName         = "GPIO2"
-	LightsName         = "GPIO3"
+	ButtonName         = "13"
+	LightsName         = "11"
 	TearDownTimeout    = 1000 // ms
 )

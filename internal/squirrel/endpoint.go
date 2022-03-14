@@ -2,6 +2,7 @@ package squirrel
 
 import (
 	"encoding/json"
+	"es/internal/consts"
 	"es/internal/utils"
 	"fmt"
 	"net/http"
@@ -11,7 +12,7 @@ func (s *Squirrel) flashReq(w http.ResponseWriter, r *http.Request) {
 	fmt.Println("flash request received")
 	w.WriteHeader(http.StatusOK)
 	w.Write([]byte("OK"))
-	go s.flash()
+	go s.flash(consts.NoOfFlashes)
 }
 
 func (s *Squirrel) knownSquirrelsReq(w http.ResponseWriter, r *http.Request) {
